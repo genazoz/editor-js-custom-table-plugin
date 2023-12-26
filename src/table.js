@@ -27,6 +27,7 @@ const CSS = {
   rowIteratable: 'tc-row--iteratable',
   cell: 'tc-cell',
   cellSelected: 'tc-cell--selected',
+  cellSuccess: 'tc-cell--success',
   addRow: 'tc-add-row',
   addColumn: 'tc-add-column'
 };
@@ -66,6 +67,7 @@ export default class Table {
     this.toolboxRow = this.createRowToolbox();
 
     this.iteratableSelect = this.createIteratableSelect();
+    this.iteratablePrefix = 'element'
 
     /**
      * Create table and wrapper elements
@@ -108,6 +110,18 @@ export default class Table {
      * Fill the table with data
      */
     this.fill();
+
+    const iteratableRowIndex = this.data?.iteratableRowIndex;
+
+    if(iteratableRowIndex) {
+      const row = this.getRow(iteratableRowIndex);
+      const cells = row.querySelectorAll(`.${CSS.cell}`)
+
+      this.markRowAsIteratable(iteratableRowIndex);
+      this.iteratableRows.push(row);
+
+      cells.forEach(cell => this.markCellIfIteratable(row, cell))
+    }
 
     /**
      * The cell in which the focus is currently located, if 0 and 0 then there is no focus
@@ -159,10 +173,14 @@ export default class Table {
     return this.container;
   }
 
+  getRowIndex(row) {
+    return Array.from(row.parentNode.children).indexOf(row)
+  }
+
   bindEventsToRow(row) {
     row.addEventListener("mousemove", throttled(150, (event) => this.onMouseMoveInRows(event)), { passive: true });
     row.addEventListener("mouseenter", throttled(150, () => {
-      const rowIndex = Array.from(row.parentNode.children).indexOf(row)
+      const rowIndex = this.getRowIndex(row)
 
       if(this.tunes.withHeadings && rowIndex !== 0 || !this.tunes.withHeadings) {
         this.iteratableSelect.element.classList.add(IteratableSelect.CSS.active)
@@ -261,13 +279,22 @@ export default class Table {
     return this.data?.iteratable
       ? new IteratableSelect({
           api: this.api,
-          items: this.config?.contents?.inlineInsertions.map(item => ({
-            label: this.api.i18n.t(item),
-            onClick: () => {
-            }
-          })),
+          items: this.config?.contents?.inlineInsertions.map(item => {
+            const content = this.api.i18n.t(item)
+
+            return ({
+              label: content,
+              onClick: () => {
+                const cell = this.getCell(this.hoveredXCell, this.hoveredYCell);
+                const row = this.getRowByCell(cell)
+
+                this.markCellIfIteratable(row, cell)
+                this.insertCellContent(this.hoveredXCell, this.hoveredYCell, '${'+`${content}`+'}')
+              }
+            })
+          }),
           hasExtraItems: () => {
-            const iteratableRowIndexes = this.iteratableRows.map(row => Array.from(row.parentNode.children).indexOf(row) + 1)
+            const iteratableRowIndexes = this.iteratableRows.map(row => this.getRowIndex(row) + 1)
 
             return iteratableRowIndexes.includes(this.hoveredXCell)
           },
@@ -301,15 +328,19 @@ export default class Table {
               new Promise((res) => {
                 setTimeout(() => {
                   const row = this.table.querySelector(`.${CSS.row}--selected`)
+                  const rowIndex = this.getRowIndex(row) + 1
+                  const condition = !!((this.iteratableRows.length > 0 && !this.iteratableRows.includes(row)) || (rowIndex === 1 && this.tunes.withHeadings))
 
-                  res((this.iteratableRows.length > 0 && !this.iteratableRows.includes(row)) || (this.numberOfRows === 1 && this.tunes.withHeadings))
+                  res(condition)
                 }, 0)
               })
             ),
             activeIf: () => (
               new Promise((res) => {
                 setTimeout(() => {
-                  const row = this.table.querySelector(`.${CSS.row}--selected`)
+                  const row = this.table.querySelector(`.${CSS.rowIteratable}`)
+
+                  console.log(row)
 
                   res(this.iteratableRows.includes(row))
                 }, 0)
@@ -318,12 +349,17 @@ export default class Table {
             onClick: () => {
               const row = this.table.querySelector(`.${CSS.row}--selected`)
 
+              const cells = row.querySelectorAll(`.${CSS.cell}`)
               if(!this.iteratableRows.includes(row)) {
                 this.iteratableRows.push(row)
                 row.classList.add(CSS.rowIteratable);
+
+                cells.forEach(cell => this.markCellIfIteratable(row, cell))
               } else {
                 this.iteratableRows = this.iteratableRows.filter(node => node !== row)
                 row.classList.remove(CSS.rowIteratable);
+
+                cells.forEach(cell => cell.classList.remove(CSS.cellSuccess))
               }
 
               this.hideToolboxes();
@@ -595,7 +631,7 @@ export default class Table {
       this.wrapper.classList.add(CSS.wrapperReadOnly);
     }
 
-    if(this.data?.iteratable){
+    if(this.data?.iteratable) {
       this.container.appendChild(this.header);
       this.header.appendChild(this.iteratableWrapper);
 
@@ -765,7 +801,7 @@ export default class Table {
   }
 
   /**
-   * Recalculate position of iterable select icons
+   * Recalculate position of iteratable select icons
    *
    * @param {Event} event - mouse move event
    */
@@ -777,7 +813,7 @@ export default class Table {
         this.hoveredYCell = column;
         this.hoveredXCell = row;
 
-        this.updateIterableSelectPosition();
+        this.updateIteratableSelectPosition();
       }
     }
   }
@@ -810,6 +846,54 @@ export default class Table {
     if (event.key === 'Tab') {
       event.stopPropagation();
     }
+
+    if(this.data?.iteratable && event.target.classList.contains(CSS.cell)) {
+      const cell = event.target;
+      const row = this.getRowByCell(cell);
+
+      this.markCellIfIteratable(row, cell)
+    }
+  }
+
+  markCellIfIteratable(row, cell) {
+    if(this.iteratableRows.includes(row)) {
+      setTimeout(() => {
+        const classList = cell.classList
+        const text = cell.innerText
+
+        if(text.match(/^\${.+}$/)) {
+          const value = text.slice(2, -1);
+          const isValueInExtraItems = this.iteratableSelect.extraItems
+              .map(item => item.label)
+              .some(item => item === value)
+
+          if(isValueInExtraItems) {
+            if(!classList.contains(CSS.cellSuccess)) {
+              classList.add(CSS.cellSuccess)
+            }
+          } else {
+            classList.remove(CSS.cellSuccess)
+          }
+        } else {
+          classList.remove(CSS.cellSuccess)
+        }
+      }, 0)
+    }
+  }
+
+  isCellIteratable(cell) {
+    const text = cell.innerText
+    let isIteratable = false;
+
+    if(text.match(/^\${.+}$/)) {
+      const value = text.slice(2, -1);
+
+      isIteratable = this.iteratableSelect.items
+          .map(item => item.label)
+          .some(item => item === value)
+    }
+
+    return cell.classList.contains(CSS.cellSuccess) || isIteratable
   }
 
   /**
@@ -837,7 +921,7 @@ export default class Table {
   hideToolboxes() {
     this.hideRowToolbox();
     this.hideColumnToolbox();
-    this.hideCellIterableSelect()
+    this.hideCellIteratableSelect()
     this.updateToolboxesPosition();
   }
 
@@ -867,7 +951,7 @@ export default class Table {
    *
    * @returns {void}
    */
-  hideCellIterableSelect() {
+  hideCellIteratableSelect() {
     this.iteratableSelect?.hide();
   }
 
@@ -924,19 +1008,19 @@ export default class Table {
   }
 
   /**
-   * Update iterable select position
+   * Update iteratable select position
    *
    * @param {number} row - hovered row
    * @param {number} column - hovered column
    */
-  updateIterableSelectPosition(row = this.hoveredXCell, column = this.hoveredYCell) {
+  updateIteratableSelectPosition(row = this.hoveredXCell, column = this.hoveredYCell) {
     this.iteratableSelect?.show(() => {
       const hoveredRowElement = this.getRow(row);
       const { fromTopBorder } = $.getRelativeCoordsOfTwoElems(this.table, hoveredRowElement);
 
       return {
         top: `${Math.ceil(fromTopBorder + 6)}px`,
-        left: `calc((100% - var(--cell-size)) / (${this.numberOfColumns} * 2) * (1.73 + (${column} - 1) * 2))`
+        left: `calc((100% - var(--cell-size)) / (${this.numberOfColumns / column}) - var(--toggler-click-zone-size) - 7px)`
       };
     });
   }
@@ -972,16 +1056,29 @@ export default class Table {
 
     if(iteratables && iteratables.length) {
       this.iteratableSelect.extraItems = iteratables.map(item => {
-        const content = this.api.i18n.t(`element.${item}`)
+        const content = this.api.i18n.t(`${this.iteratablePrefix}.${item}`)
 
         return ({
           label: content,
           onClick: () => {
+            const cell = this.getCell(this.hoveredXCell, this.hoveredYCell);
+            const row = this.getRowByCell(cell)
+
+            this.markCellIfIteratable(row, cell)
             this.insertCellContent(this.hoveredXCell, this.hoveredYCell, '${'+`${content}`+'}')
           }
         })
       })
+
+      const iteratableRow = this?.iteratableRows?.[0]
+
+      if(iteratableRow) {
+        const cells = iteratableRow.querySelectorAll(`.${CSS.cell}`)
+
+        cells.forEach(cell => this.markCellIfIteratable(iteratableRow, cell))
+      }
     }
+
 
     this.header.innerHTML = `
       <div class="tc-capsule">
@@ -1033,12 +1130,12 @@ export default class Table {
     }
   }
 
-  markAsIteratableRow(index) {
+  markRowAsIteratable(index) {
     const row = this.getRow(index);
 
     if (row) {
       this.selectedRow = index;
-      row.classList.add(CSS.rowSelected);
+      row.classList.add(CSS.rowIteratable);
     }
   }
 

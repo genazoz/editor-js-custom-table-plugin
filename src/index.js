@@ -18,17 +18,17 @@ const editor = new EditorJS({
                         'врачи.кол-во',
                     ],
                     iteratables: {
-                        patients: [
-                            'фио',
-                            'возраст',
-                            'пол',
-                            'номер',
-                        ],
                         billings: [
                             'услуги',
                             'название',
                             'код',
                             'цена',
+                        ],
+                        patients: [
+                            'фио',
+                            'возраст',
+                            'пол',
+                            'номер',
                         ],
                     }
                 },
@@ -42,11 +42,41 @@ const editor = new EditorJS({
                 id: "XXVTfnMlcE",
                 type: "table",
                 data: {
+                    iteratableType: "patients",
+                    iteratableRowIndex: 3,
                     withHeadings: true,
                     content: [
-                        ["English", "Russian", "Japanese"],
-                        ["Sweet", "Сладкий", "あまい"],
-                        ["Good morning", "Доброе утро", "おはようございます"]]
+                        [
+                            "English",
+                            "Russian",
+                            "Japanese",
+                            "dddd"
+                        ],
+                        [
+                            "${счет.сумма}",
+                            "${element.пол}",
+                            "あまい",
+                            ""
+                        ],
+                        [
+                            "${element.пол}",
+                            "${element.возраст}",
+                            "${element.фио}",
+                            "${element.номер}"
+                        ],
+                        [
+                            "${врачи.кол-во}",
+                            "${пациенты.кол-во}",
+                            "${счет.сумма}",
+                            ""
+                        ],
+                        [
+                            "Good morning",
+                            "Доброе утро",
+                            "おはようございます",
+                            ""
+                        ]
+                    ]
                 }
             }
         ],
@@ -59,6 +89,7 @@ const output = document.querySelector('.output');
 
 saveButton.addEventListener('click', () => {
     editor.save().then(savedData => {
+        console.log(savedData);
         output.innerHTML = JSON.stringify(savedData, null, 4);
     });
 });

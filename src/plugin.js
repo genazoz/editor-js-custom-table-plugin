@@ -57,11 +57,14 @@ export default class TableBlock {
     this.readOnly = readOnly;
     this.config = config;
     this.data = {
-      iteratable: config?.contents?.iteratables
-          ? Object.keys(config?.contents?.iteratables)[0]
-          : undefined,
+      ...data,
+      iteratable: data?.iteratableType
+          ? data.iteratableType
+          : config?.contents?.iteratables
+              ? Object.keys(config?.contents?.iteratables)[0]
+              : undefined,
       withHeadings: this.getConfig('withHeadings', false, data),
-      content: data && data.content ? data.content : []
+      content: data && data.content ? data.content : [],
     };
     this.table = null;
   }
@@ -105,17 +108,17 @@ export default class TableBlock {
    */
   renderSettings() {
     const settings = [
-        {
-          label: this.api.i18n.t('Headings'),
-          icon: IconTableWithHeadings,
-          isActive: this.data.withHeadings,
-          closeOnActivate: true,
-          toggle: true,
-          onActivate: () => {
-            this.data.withHeadings = !this.data.withHeadings;
-            this.table.setHeadingsSetting(this.data.withHeadings);
-          }
-        },
+      {
+        label: this.api.i18n.t('Headings'),
+        icon: IconTableWithHeadings,
+        isActive: this.data.withHeadings,
+        closeOnActivate: true,
+        toggle: true,
+        onActivate: () => {
+          this.data.withHeadings = !this.data.withHeadings;
+          this.table.setHeadingsSetting(this.data.withHeadings);
+        }
+      },
     ]
 
     if(this.config?.contents?.iteratables) {
@@ -142,10 +145,16 @@ export default class TableBlock {
    */
   save() {
     const tableContent = this.table.getData();
+    const iteratableRow = this.table?.iteratableRows?.[0];
+    const iteratableRowIndex = iteratableRow
+        ? this.table.getRowIndex(iteratableRow) + 1
+        : undefined
 
     const result = {
+      iteratableType: this.table.data.iteratable,
+      iteratableRowIndex,
       withHeadings: this.data.withHeadings,
-      content: tableContent
+      content: tableContent,
     };
 
     return result;

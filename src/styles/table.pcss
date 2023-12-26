@@ -1,4 +1,9 @@
 /* tc- project's prefix*/
+.tc-container {
+  position: relative;
+  z-index: 0;
+}
+
 .tc-wrap {
   --color-background: #f9f9fb;
   --color-text-secondary: #7b7e89;
@@ -207,6 +212,10 @@
   &--selected {
     background: var(--color-background);
   }
+}
+
+.tc-cell--success {
+  background: rgba(50, 205, 50, .3);
 }
 
 .tc-wrap--readonly .tc-row::after {
